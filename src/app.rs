@@ -1,11 +1,11 @@
 use std::path::{Path, PathBuf};
-use eframe::egui::{self, Align, Color32, Layout, RichText, ScrollArea, Stroke, TextEdit, Ui};
+use eframe::egui::{self, Align, Layout, RichText, ScrollArea, Stroke, TextEdit, Ui};
 use arboard::Clipboard;
 
 use crate::excel_engine;
 use crate::fs_engine;
 use crate::models::{ActiveTab, DeleteTargetType, ItemStatus, LogLevel, LogMessage, RenameItem, SheetItem, TabCategory};
-use crate::theme::{self, COLOR_ERROR, COLOR_SUCCESS, COLOR_TEAL, COLOR_WARNING};
+use crate::theme;
 
 pub struct MacroSuiteApp {
     // Theme
@@ -298,31 +298,19 @@ impl MacroSuiteApp {
 
         ui.add_space(12.0);
 
-        // Category Switcher Pills
+        // Category Switcher: Segmented Control
         ui.horizontal(|ui| {
             let cat_ff_active = self.current_category == TabCategory::FilesAndFolders;
             let cat_ex_active = self.current_category == TabCategory::ExcelSuite;
 
-            let ff_rich = if cat_ff_active {
-                RichText::new("📁 File & Directory Tools").color(if self.dark_mode { Color32::WHITE } else { Color32::BLACK }).strong().size(14.0)
-            } else {
-                RichText::new("📁 File & Directory Tools").color(theme::text_muted(self.dark_mode)).size(14.0)
-            };
-
-            if ui.selectable_label(cat_ff_active, ff_rich).clicked() {
+            if theme::category_tab_button(ui, self.dark_mode, "📁 File & Directory Tools", cat_ff_active).clicked() {
                 self.current_category = TabCategory::FilesAndFolders;
                 self.current_tab = ActiveTab::RenameFiles;
             }
 
             ui.add_space(8.0);
 
-            let ex_rich = if cat_ex_active {
-                RichText::new("📊 Excel Automation Suite").color(if self.dark_mode { Color32::WHITE } else { Color32::BLACK }).strong().size(14.0)
-            } else {
-                RichText::new("📊 Excel Automation Suite").color(theme::text_muted(self.dark_mode)).size(14.0)
-            };
-
-            if ui.selectable_label(cat_ex_active, ex_rich).clicked() {
+            if theme::category_tab_button(ui, self.dark_mode, "📊 Excel Automation Suite", cat_ex_active).clicked() {
                 self.current_category = TabCategory::ExcelSuite;
                 self.current_tab = ActiveTab::ExcelRenameSheets;
             }
@@ -351,28 +339,21 @@ impl MacroSuiteApp {
 
     fn tab_button(&mut self, ui: &mut Ui, label: &str, tab: ActiveTab) {
         let is_selected = self.current_tab == tab;
-        let rich = if is_selected {
-            RichText::new(label).color(if self.dark_mode { Color32::WHITE } else { Color32::BLACK }).strong()
-        } else {
-            RichText::new(label).color(theme::text_muted(self.dark_mode))
-        };
-        if ui.selectable_label(is_selected, rich).clicked() {
+        if theme::sub_tab_button(ui, self.dark_mode, label, is_selected).clicked() {
             self.current_tab = tab;
         }
     }
 
     fn render_excel_source_card(&mut self, ui: &mut Ui) {
-        let accent = theme::accent_color(self.dark_mode);
-
         theme::card_frame(self.dark_mode).show(ui, |ui| {
             // Row 1: Title and Status Badge
             ui.horizontal(|ui| {
                 ui.label(RichText::new("Target Excel Workbook").strong().size(15.0));
                 ui.add_space(6.0);
                 if Path::new(&self.excel_file_path).exists() {
-                    theme::render_badge(ui, "CONNECTED", Color32::from_rgb(22, 101, 52), Color32::WHITE);
+                    theme::render_badge(ui, "CONNECTED", theme::BadgeIntent::Success, self.dark_mode);
                 } else {
-                    theme::render_badge(ui, "NO FILE", Color32::from_rgb(107, 114, 128), Color32::WHITE);
+                    theme::render_badge(ui, "NO FILE", theme::BadgeIntent::Neutral, self.dark_mode);
                 }
             });
 
@@ -395,7 +376,7 @@ impl MacroSuiteApp {
                 let mut chosen_wb: Option<String> = None;
 
                 egui::ComboBox::from_id_salt("active_excel_dropdown")
-                    .width(310.0)
+                    .width(280.0)
                     .selected_text(RichText::new(&current_name).strong())
                     .show_ui(ui, |ui| {
                         if self.open_excel_workbooks.is_empty() {
@@ -422,7 +403,7 @@ impl MacroSuiteApp {
 
                 ui.add_space(6.0);
 
-                if ui.button(RichText::new("⚡ Reload from Active Excel").strong().color(accent))
+                if ui.button("⚡ Reload from Active Excel")
                     .on_hover_text("Connect to the active window in Microsoft Excel, save changes, and reload sheets")
                     .clicked()
                 {
@@ -523,8 +504,6 @@ impl MacroSuiteApp {
 // ---------------- TAB 1: BATCH RENAME FILES ----------------
 impl MacroSuiteApp {
     fn render_rename_files_tab(&mut self, ui: &mut Ui) {
-        let accent = theme::accent_color(self.dark_mode);
-
         theme::card_frame(self.dark_mode).show(ui, |ui| {
             // Row 1: Target directory path input & Browse button
             ui.horizontal(|ui| {
@@ -554,7 +533,7 @@ impl MacroSuiteApp {
 
                 ui.add_space(12.0);
 
-                if ui.button(RichText::new("🔍 Scan Files").strong().color(accent))
+                if ui.button("🔍 Scan Files")
                     .on_hover_text("Scan the target directory for matching files")
                     .clicked()
                 {
@@ -576,8 +555,8 @@ impl MacroSuiteApp {
                 theme::render_badge(
                     ui,
                     &format!("{count} loaded"),
-                    if count > 0 { Color32::from_rgb(22, 101, 52) } else { Color32::from_rgb(75, 85, 99) },
-                    Color32::WHITE,
+                    if count > 0 { theme::BadgeIntent::Accent } else { theme::BadgeIntent::Neutral },
+                    self.dark_mode,
                 );
             });
 
@@ -585,7 +564,7 @@ impl MacroSuiteApp {
 
             // Dedicated Action Toolbar Row (Never overflows or clips!)
             ui.horizontal_wrapped(|ui| {
-                if ui.button(RichText::new("▶ Apply Rename All").strong().color(COLOR_SUCCESS))
+                if theme::primary_button(ui, self.dark_mode, "▶ Apply Rename All")
                     .on_hover_text("Execute renaming on disk for all files in the list")
                     .clicked()
                 {
@@ -661,7 +640,7 @@ impl MacroSuiteApp {
                                     });
 
                                     ui.add(TextEdit::singleline(&mut item.new_name).desired_width(320.0));
-                                    theme::render_status_badge(ui, &item.status);
+                                    theme::render_status_badge(ui, &item.status, self.dark_mode);
                                     ui.end_row();
                                 }
 
@@ -718,8 +697,6 @@ impl MacroSuiteApp {
 // ---------------- TAB 2: BATCH RENAME FOLDERS ----------------
 impl MacroSuiteApp {
     fn render_rename_folders_tab(&mut self, ui: &mut Ui) {
-        let accent = theme::accent_color(self.dark_mode);
-
         theme::card_frame(self.dark_mode).show(ui, |ui| {
             // Row 1: Parent directory path input & Browse button
             ui.horizontal(|ui| {
@@ -743,7 +720,7 @@ impl MacroSuiteApp {
 
             // Row 2: Scan action button
             ui.horizontal_wrapped(|ui| {
-                if ui.button(RichText::new("🔍 Scan Subfolders").strong().color(accent))
+                if ui.button("🔍 Scan Subfolders")
                     .on_hover_text("Scan the directory for subfolders to rename")
                     .clicked()
                 {
@@ -764,8 +741,8 @@ impl MacroSuiteApp {
                 theme::render_badge(
                     ui,
                     &format!("{count} loaded"),
-                    if count > 0 { Color32::from_rgb(22, 101, 52) } else { Color32::from_rgb(75, 85, 99) },
-                    Color32::WHITE,
+                    if count > 0 { theme::BadgeIntent::Accent } else { theme::BadgeIntent::Neutral },
+                    self.dark_mode,
                 );
             });
 
@@ -773,7 +750,7 @@ impl MacroSuiteApp {
 
             // Dedicated Action Toolbar Row (Never overflows or clips!)
             ui.horizontal_wrapped(|ui| {
-                if ui.button(RichText::new("▶ Apply Rename All").strong().color(COLOR_SUCCESS))
+                if theme::primary_button(ui, self.dark_mode, "▶ Apply Rename All")
                     .on_hover_text("Execute renaming on disk for all folders in the list")
                     .clicked()
                 {
@@ -849,7 +826,7 @@ impl MacroSuiteApp {
                                     });
 
                                     ui.add(TextEdit::singleline(&mut item.new_name).desired_width(320.0));
-                                    theme::render_status_badge(ui, &item.status);
+                                    theme::render_status_badge(ui, &item.status, self.dark_mode);
                                     ui.end_row();
                                 }
 
@@ -1067,7 +1044,7 @@ impl MacroSuiteApp {
             ui.horizontal(|ui| {
                 ui.label(RichText::new(format!("Total Folders to Create: {count}")).color(txt_muted).strong());
                 ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                    if ui.button(RichText::new("▶ Create Folders Now").strong().color(COLOR_SUCCESS)).clicked() {
+                    if theme::primary_button(ui, self.dark_mode, "➕ Create Folders Now").clicked() {
                         self.execute_create_folders();
                     }
                 });
@@ -1152,13 +1129,14 @@ impl MacroSuiteApp {
             ui.horizontal(|ui| {
                 ui.checkbox(
                     &mut self.delete_confirmed,
-                    RichText::new("I understand this permanently deletes matched files/folders").color(COLOR_WARNING),
+                    RichText::new("I understand this permanently deletes matched files/folders").color(theme::color_warning(self.dark_mode)),
                 );
                 ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                    let btn = egui::Button::new(RichText::new("🗑 Delete Items Now").strong().color(COLOR_ERROR));
-                    if ui.add_enabled(self.delete_confirmed, btn).clicked() {
-                        self.execute_delete_items();
-                    }
+                    ui.add_enabled_ui(self.delete_confirmed, |ui| {
+                        if theme::danger_button(ui, self.dark_mode, "🗑 Delete Items Now").clicked() {
+                            self.execute_delete_items();
+                        }
+                    });
                 });
             });
         });
@@ -1215,7 +1193,7 @@ impl MacroSuiteApp {
 
             // Dedicated Action Toolbar Row (Never clips!)
             ui.horizontal_wrapped(|ui| {
-                if ui.button(RichText::new("▶ Save Renamed Workbook").strong().color(COLOR_SUCCESS))
+                if theme::primary_button(ui, self.dark_mode, "▶ Save Renamed Workbook")
                     .on_hover_text("Save modified sheet names to a new workbook file")
                     .clicked()
                 {
@@ -1295,9 +1273,9 @@ impl MacroSuiteApp {
                                     ui.label(format!("{}", s.index));
 
                                     if s.is_hidden {
-                                        theme::render_badge(ui, "HIDDEN", Color32::from_rgb(55, 65, 81), Color32::from_rgb(209, 213, 219));
+                                        theme::render_badge(ui, "HIDDEN", theme::BadgeIntent::Neutral, self.dark_mode);
                                     } else {
-                                        theme::render_badge(ui, "ACTIVE", Color32::from_rgb(6, 78, 59), COLOR_SUCCESS);
+                                        theme::render_badge(ui, "ACTIVE", theme::BadgeIntent::Success, self.dark_mode);
                                     }
 
                                     ui.horizontal(|ui| {
@@ -1316,7 +1294,7 @@ impl MacroSuiteApp {
                                     }
 
                                     ui.label(format!("{}", s.row_count));
-                                    theme::render_status_badge(ui, &s.status);
+                                    theme::render_status_badge(ui, &s.status, self.dark_mode);
                                     ui.end_row();
                                 }
 
@@ -1432,7 +1410,7 @@ impl MacroSuiteApp {
             ui.label(RichText::new("   Clears conditional formatting rules across all sheets to optimize file size and open speed.").color(txt_muted).size(12.0));
 
             ui.add_space(18.0);
-            if ui.button(RichText::new("🧹 Clean Workbook & Save As...").strong().color(COLOR_SUCCESS)).clicked() {
+            if theme::primary_button(ui, self.dark_mode, "🧹 Clean Workbook & Save As...").clicked() {
                 self.execute_clean_workbook();
             }
         });
@@ -1502,7 +1480,7 @@ impl MacroSuiteApp {
 
             // Dedicated Action Toolbar Row (Never clips!)
             ui.horizontal_wrapped(|ui| {
-                if ui.button(RichText::new("▶ Combine Selected Sheets").strong().color(COLOR_SUCCESS))
+                if theme::primary_button(ui, self.dark_mode, "▶ Combine Selected Sheets")
                     .on_hover_text("Merge data from all selected sheets sequentially into one new workbook")
                     .clicked()
                 {
@@ -1569,7 +1547,7 @@ impl MacroSuiteApp {
                                         ui.label("-");
                                         ui.label(RichText::new(&s.original_name).color(txt_muted));
                                         ui.label(format!("{}", s.row_count));
-                                        theme::render_badge(ui, "HIDDEN (Skipped)", Color32::from_rgb(55, 65, 81), Color32::from_rgb(209, 213, 219));
+                                        theme::render_badge(ui, "HIDDEN (Skipped)", theme::BadgeIntent::Neutral, self.dark_mode);
                                     } else {
                                         ui.checkbox(&mut s.is_selected, "");
                                         ui.horizontal(|ui| {
@@ -1579,7 +1557,7 @@ impl MacroSuiteApp {
                                             ui.label(RichText::new(&s.original_name).strong());
                                         });
                                         ui.label(format!("{}", s.row_count));
-                                        theme::render_badge(ui, "ACTIVE", Color32::from_rgb(6, 78, 59), COLOR_SUCCESS);
+                                        theme::render_badge(ui, "ACTIVE", theme::BadgeIntent::Success, self.dark_mode);
                                     }
                                     ui.end_row();
                                 }
@@ -1683,7 +1661,7 @@ impl MacroSuiteApp {
 
             ui.add_space(12.0);
             let active_sheets: Vec<&SheetItem> = self.excel_sheets.iter().filter(|s| !s.is_hidden).collect();
-            ui.label(RichText::new(format!("Active Sheets Ready to Export: {}", active_sheets.len())).strong().color(COLOR_TEAL));
+            ui.label(RichText::new(format!("Active Sheets Ready to Export: {}", active_sheets.len())).strong().color(theme::text_primary(self.dark_mode)));
 
             ui.add_space(6.0);
             for s in active_sheets.iter().take(8) {
@@ -1694,7 +1672,7 @@ impl MacroSuiteApp {
             }
 
             ui.add_space(16.0);
-            if ui.button(RichText::new("📕 Export Active Sheets to PDF Now").strong().color(COLOR_SUCCESS)).clicked() {
+            if theme::primary_button(ui, self.dark_mode, "📕 Export Active Sheets to PDF Now").clicked() {
                 self.execute_export_pdf();
             }
         });
