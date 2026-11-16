@@ -10,3 +10,6 @@ eframe = "0.31"
 rfd = "0.18.0"
 rust_xlsxwriter = "0.102.0"
 zip = "2.2"
+
+[build-dependencies]
+winres = "0.1"
