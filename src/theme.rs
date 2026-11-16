@@ -1,17 +1,100 @@
 use eframe::egui::{self, Color32, CornerRadius, Frame, Margin, Stroke, Ui};
 use crate::models::{ItemStatus, LogLevel};
 
+pub fn setup_custom_fonts(ctx: &egui::Context) {
+    let mut fonts = egui::FontDefinitions::default();
+
+    // Check Windows system fonts: Segoe UI (Clean modern sans-serif), Segoe UI Symbol, and Consolas (Monospace)
+    let segoe_path = "C:\\Windows\\Fonts\\segoeui.ttf";
+    let segoe_bold_path = "C:\\Windows\\Fonts\\segoeuib.ttf";
+    let seguisym_path = "C:\\Windows\\Fonts\\seguisym.ttf";
+    let consolas_path = "C:\\Windows\\Fonts\\consola.ttf";
+
+    let mut has_segoe = false;
+    if let Ok(data) = std::fs::read(segoe_path) {
+        fonts.font_data.insert(
+            "segoe_ui".to_owned(),
+            std::sync::Arc::new(egui::FontData::from_owned(data)),
+        );
+        has_segoe = true;
+    }
+
+    if let Ok(data) = std::fs::read(segoe_bold_path) {
+        fonts.font_data.insert(
+            "segoe_ui_bold".to_owned(),
+            std::sync::Arc::new(egui::FontData::from_owned(data)),
+        );
+    }
+
+    let mut has_symbol = false;
+    if let Ok(data) = std::fs::read(seguisym_path) {
+        fonts.font_data.insert(
+            "segoe_ui_symbol".to_owned(),
+            std::sync::Arc::new(egui::FontData::from_owned(data)),
+        );
+        has_symbol = true;
+    }
+
+    let mut has_consolas = false;
+    if let Ok(data) = std::fs::read(consolas_path) {
+        fonts.font_data.insert(
+            "consolas".to_owned(),
+            std::sync::Arc::new(egui::FontData::from_owned(data)),
+        );
+        has_consolas = true;
+    }
+
+    if has_segoe {
+        if let Some(prop) = fonts.families.get_mut(&egui::FontFamily::Proportional) {
+            prop.insert(0, "segoe_ui".to_owned());
+        }
+    }
+
+    if has_symbol {
+        if let Some(prop) = fonts.families.get_mut(&egui::FontFamily::Proportional) {
+            prop.push("segoe_ui_symbol".to_owned());
+        }
+    }
+
+    if has_consolas {
+        if let Some(mono) = fonts.families.get_mut(&egui::FontFamily::Monospace) {
+            mono.insert(0, "consolas".to_owned());
+        }
+    }
+
+    ctx.set_fonts(fonts);
+
+    // Apply refined typography scale
+    let mut style = (*ctx.style()).clone();
+    style.text_styles = [
+        (egui::TextStyle::Heading, egui::FontId::new(20.0, egui::FontFamily::Proportional)),
+        (egui::TextStyle::Name("Subheading".into()), egui::FontId::new(16.0, egui::FontFamily::Proportional)),
+        (egui::TextStyle::Body, egui::FontId::new(14.0, egui::FontFamily::Proportional)),
+        (egui::TextStyle::Button, egui::FontId::new(13.5, egui::FontFamily::Proportional)),
+        (egui::TextStyle::Monospace, egui::FontId::new(12.5, egui::FontFamily::Monospace)),
+        (egui::TextStyle::Small, egui::FontId::new(11.5, egui::FontFamily::Proportional)),
+    ].into();
+
+    // Spacious comfortable layout defaults
+    style.spacing.item_spacing = egui::vec2(10.0, 8.0);
+    style.spacing.button_padding = egui::vec2(13.0, 7.0);
+    style.spacing.window_margin = Margin::same(14);
+    style.spacing.indent = 16.0;
+
+    ctx.set_style(style);
+}
+
 pub fn bg_main(dark: bool) -> Color32 {
     if dark {
-        Color32::from_rgb(18, 22, 31)
+        Color32::from_rgb(17, 20, 29)
     } else {
-        Color32::from_rgb(243, 244, 246)
+        Color32::from_rgb(243, 245, 248)
     }
 }
 
 pub fn bg_card(dark: bool) -> Color32 {
     if dark {
-        Color32::from_rgb(26, 32, 46)
+        Color32::from_rgb(25, 31, 45)
     } else {
         Color32::from_rgb(255, 255, 255)
     }
@@ -19,15 +102,15 @@ pub fn bg_card(dark: bool) -> Color32 {
 
 pub fn bg_card_light(dark: bool) -> Color32 {
     if dark {
-        Color32::from_rgb(34, 42, 60)
+        Color32::from_rgb(33, 41, 59)
     } else {
-        Color32::from_rgb(248, 249, 251)
+        Color32::from_rgb(248, 250, 252)
     }
 }
 
 pub fn border_color(dark: bool) -> Color32 {
     if dark {
-        Color32::from_rgb(48, 60, 84)
+        Color32::from_rgb(46, 58, 82)
     } else {
         Color32::from_rgb(222, 226, 233)
     }
@@ -89,7 +172,7 @@ pub fn apply_custom_theme(ctx: &egui::Context, dark_mode: bool) {
     visuals.window_fill = bg_card(dark_mode);
     visuals.faint_bg_color = bg_card_light(dark_mode);
     visuals.extreme_bg_color = if dark_mode {
-        Color32::from_rgb(14, 17, 24)
+        Color32::from_rgb(13, 16, 23)
     } else {
         Color32::from_rgb(241, 245, 249)
     };
@@ -102,65 +185,77 @@ pub fn apply_custom_theme(ctx: &egui::Context, dark_mode: bool) {
     let accent_hov = accent_hover_color(dark_mode);
 
     visuals.widgets.noninteractive.bg_fill = card_bg;
-    visuals.widgets.noninteractive.bg_stroke = Stroke::new(1.0, border);
-    visuals.widgets.noninteractive.corner_radius = CornerRadius::same(6);
-    visuals.widgets.noninteractive.fg_stroke = Stroke::new(1.0, txt);
+    visuals.widgets.noninteractive.bg_stroke = Stroke::new(1.0_f32, border);
+    visuals.widgets.noninteractive.corner_radius = CornerRadius::same(8);
+    visuals.widgets.noninteractive.fg_stroke = Stroke::new(1.0_f32, txt);
 
     visuals.widgets.inactive.bg_fill = card_light;
-    visuals.widgets.inactive.bg_stroke = Stroke::new(1.0, border);
-    visuals.widgets.inactive.corner_radius = CornerRadius::same(6);
-    visuals.widgets.inactive.fg_stroke = Stroke::new(1.0, txt);
+    visuals.widgets.inactive.bg_stroke = Stroke::new(1.0_f32, border);
+    visuals.widgets.inactive.corner_radius = CornerRadius::same(8);
+    visuals.widgets.inactive.fg_stroke = Stroke::new(1.0_f32, txt);
 
     visuals.widgets.hovered.bg_fill = if dark_mode {
         Color32::from_rgb(45, 56, 78)
     } else {
         Color32::from_rgb(224, 231, 255)
     };
-    visuals.widgets.hovered.bg_stroke = Stroke::new(1.0, accent);
-    visuals.widgets.hovered.corner_radius = CornerRadius::same(6);
-    visuals.widgets.hovered.fg_stroke = Stroke::new(1.0, if dark_mode { Color32::WHITE } else { Color32::BLACK });
+    visuals.widgets.hovered.bg_stroke = Stroke::new(1.0_f32, accent);
+    visuals.widgets.hovered.corner_radius = CornerRadius::same(8);
+    visuals.widgets.hovered.fg_stroke = Stroke::new(1.0_f32, if dark_mode { Color32::WHITE } else { Color32::BLACK });
 
     visuals.widgets.active.bg_fill = if dark_mode {
         Color32::from_rgb(56, 70, 98)
     } else {
         Color32::from_rgb(199, 210, 254)
     };
-    visuals.widgets.active.bg_stroke = Stroke::new(1.5, accent_hov);
-    visuals.widgets.active.corner_radius = CornerRadius::same(6);
-    visuals.widgets.active.fg_stroke = Stroke::new(1.0, if dark_mode { Color32::WHITE } else { Color32::BLACK });
+    visuals.widgets.active.bg_stroke = Stroke::new(1.5_f32, accent_hov);
+    visuals.widgets.active.corner_radius = CornerRadius::same(8);
+    visuals.widgets.active.fg_stroke = Stroke::new(1.0_f32, if dark_mode { Color32::WHITE } else { Color32::BLACK });
 
     visuals.selection.bg_fill = if dark_mode {
         Color32::from_rgba_premultiplied(56, 189, 248, 60)
     } else {
         Color32::from_rgba_premultiplied(2, 132, 199, 50)
     };
-    visuals.selection.stroke = Stroke::new(1.0, accent);
+    visuals.selection.stroke = Stroke::new(1.0_f32, accent);
 
     ctx.set_visuals(visuals);
 }
 
 pub fn card_frame(dark_mode: bool) -> Frame {
     Frame {
-        inner_margin: Margin::same(14),
+        inner_margin: Margin::symmetric(18, 16),
         outer_margin: Margin::symmetric(0, 6),
-        corner_radius: CornerRadius::same(8),
+        corner_radius: CornerRadius::same(10),
         fill: bg_card(dark_mode),
-        stroke: Stroke::new(1.0, border_color(dark_mode)),
+        stroke: Stroke::new(1.0_f32, border_color(dark_mode)),
+        ..Default::default()
+    }
+}
+
+#[allow(dead_code)]
+pub fn subcard_frame(dark_mode: bool) -> Frame {
+    Frame {
+        inner_margin: Margin::symmetric(14, 12),
+        outer_margin: Margin::symmetric(0, 4),
+        corner_radius: CornerRadius::same(8),
+        fill: bg_card_light(dark_mode),
+        stroke: Stroke::new(1.0_f32, border_color(dark_mode)),
         ..Default::default()
     }
 }
 
 pub fn log_panel_frame(dark_mode: bool) -> Frame {
     Frame {
-        inner_margin: Margin::same(10),
+        inner_margin: Margin::symmetric(14, 10),
         outer_margin: Margin::ZERO,
-        corner_radius: CornerRadius::same(6),
+        corner_radius: CornerRadius::same(8),
         fill: if dark_mode {
-            Color32::from_rgb(14, 17, 24)
+            Color32::from_rgb(13, 16, 23)
         } else {
             Color32::from_rgb(248, 250, 252)
         },
-        stroke: Stroke::new(1.0, border_color(dark_mode)),
+        stroke: Stroke::new(1.0_f32, border_color(dark_mode)),
         ..Default::default()
     }
 }
@@ -187,13 +282,13 @@ pub fn render_status_badge(ui: &mut Ui, status: &ItemStatus) {
 
 pub fn render_badge(ui: &mut Ui, text: &str, bg_color: Color32, text_color: Color32) {
     let frame = Frame {
-        inner_margin: Margin::symmetric(8, 3),
-        corner_radius: CornerRadius::same(4),
+        inner_margin: Margin::symmetric(10, 4),
+        corner_radius: CornerRadius::same(6),
         fill: bg_color,
         ..Default::default()
     };
     frame.show(ui, |ui| {
-        ui.label(egui::RichText::new(text).color(text_color).size(11.0).strong());
+        ui.label(egui::RichText::new(text).color(text_color).size(11.5).strong());
     });
 }
 

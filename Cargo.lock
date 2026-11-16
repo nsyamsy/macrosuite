@@ -1932,7 +1932,6 @@ dependencies = [
  "eframe",
  "rfd",
  "rust_xlsxwriter",
- "walkdir",
  "zip 2.6.1",
 ]
 

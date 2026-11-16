@@ -12,9 +12,9 @@ use eframe::egui::{Vec2, ViewportBuilder};
 fn main() -> eframe::Result<()> {
     let native_options = eframe::NativeOptions {
         viewport: ViewportBuilder::default()
-            .with_title("⚡ MacroSuite Studio — Modern Office Automation")
-            .with_inner_size(Vec2::new(1020.0, 720.0))
-            .with_min_inner_size(Vec2::new(820.0, 560.0)),
+            .with_title("MacroSuite Studio")
+            .with_inner_size(Vec2::new(1160.0, 780.0))
+            .with_min_inner_size(Vec2::new(820.0, 540.0)),
         ..Default::default()
     };
 
@@ -22,6 +22,7 @@ fn main() -> eframe::Result<()> {
         "MacroSuite Studio",
         native_options,
         Box::new(|cc| {
+            theme::setup_custom_fonts(&cc.egui_ctx);
             theme::apply_custom_theme(&cc.egui_ctx, true);
             Ok(Box::new(MacroSuiteApp::default()))
         }),

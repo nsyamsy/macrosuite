@@ -432,6 +432,188 @@ try {{
     Ok(exported_sheets)
 }
 
+#[derive(Clone, Debug)]
+pub struct ActiveWorkbookInfo {
+    pub file_path: String,
+    pub file_name: String,
+    pub was_dirty: bool,
+    pub auto_saved: bool,
+    #[allow(dead_code)]
+    pub other_open_workbooks: Vec<String>,
+}
+
+/// Detects the currently active Excel workbook from a running Microsoft Excel instance via COM.
+/// If `save_if_dirty` is true and the active workbook has unsaved edits in Excel, it will automatically save them.
+pub fn detect_active_excel(save_if_dirty: bool) -> Result<ActiveWorkbookInfo, String> {
+    let save_flag = if save_if_dirty { "$true" } else { "$false" };
+    let ps_script = format!(
+        r#"
+$ErrorActionPreference = 'Stop'
+try {{
+    $excel = [System.Runtime.InteropServices.Marshal]::GetActiveObject("Excel.Application")
+    if ($null -eq $excel) {{
+        Write-Output "STATUS:NOT_RUNNING"
+        exit 0
+    }}
+    $wb = $excel.ActiveWorkbook
+    if ($null -eq $wb) {{
+        Write-Output "STATUS:NO_WORKBOOK"
+        exit 0
+    }}
+    $wasDirty = (-not $wb.Saved)
+    $autoSaved = $false
+    if ({save_flag} -and $wasDirty) {{
+        try {{
+            $wb.Save()
+            $autoSaved = $true
+        }} catch {{
+            $autoSaved = $false
+        }}
+    }}
+    Write-Output "STATUS:OK"
+    Write-Output "FULL_NAME:$($wb.FullName)"
+    Write-Output "NAME:$($wb.Name)"
+    Write-Output "PATH:$($wb.Path)"
+    Write-Output "WAS_DIRTY:$wasDirty"
+    Write-Output "AUTO_SAVED:$autoSaved"
+    foreach ($w in $excel.Workbooks) {{
+        if ($w.FullName -ne $wb.FullName) {{
+            Write-Output "OTHER_WB:$($w.FullName)"
+        }}
+    }}
+}} catch {{
+    Write-Output "STATUS:NOT_RUNNING"
+}}
+"#
+    );
+
+    let output = Command::new("powershell")
+        .args(["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", &ps_script])
+        .output()
+        .map_err(|e| format!("Failed to execute PowerShell: {e}"))?;
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let mut status = "NOT_RUNNING".to_string();
+    let mut full_name = String::new();
+    let mut name = String::new();
+    let mut path = String::new();
+    let mut was_dirty = false;
+    let mut auto_saved = false;
+    let mut other_wbs = Vec::new();
+
+    for line in stdout.lines() {
+        let trimmed = line.trim();
+        if let Some(val) = trimmed.strip_prefix("STATUS:") {
+            status = val.to_string();
+        } else if let Some(val) = trimmed.strip_prefix("FULL_NAME:") {
+            full_name = val.to_string();
+        } else if let Some(val) = trimmed.strip_prefix("NAME:") {
+            name = val.to_string();
+        } else if let Some(val) = trimmed.strip_prefix("PATH:") {
+            path = val.to_string();
+        } else if let Some(val) = trimmed.strip_prefix("WAS_DIRTY:") {
+            was_dirty = val.eq_ignore_ascii_case("True");
+        } else if let Some(val) = trimmed.strip_prefix("AUTO_SAVED:") {
+            auto_saved = val.eq_ignore_ascii_case("True");
+        } else if let Some(val) = trimmed.strip_prefix("OTHER_WB:") {
+            if !val.is_empty() {
+                other_wbs.push(val.to_string());
+            }
+        }
+    }
+
+    match status.as_str() {
+        "NOT_RUNNING" => Err("Microsoft Excel is not running or no active Excel instance was detected.".to_string()),
+        "NO_WORKBOOK" => Err("Microsoft Excel is open, but no active workbook was detected.".to_string()),
+        "OK" => {
+            if path.is_empty() || !Path::new(&full_name).exists() {
+                Err(format!("Active workbook '{name}' has not been saved to disk yet. Please Save As first in Excel."))
+            } else {
+                Ok(ActiveWorkbookInfo {
+                    file_path: full_name,
+                    file_name: name,
+                    was_dirty,
+                    auto_saved,
+                    other_open_workbooks: other_wbs,
+                })
+            }
+        }
+        other => Err(format!("Excel detection failed: {other}")),
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct ExcelWorkbookItem {
+    pub full_path: String,
+    pub name: String,
+    pub is_active: bool,
+    pub is_saved: bool,
+}
+
+/// Retrieves the list of all workbooks currently open in Microsoft Excel.
+pub fn get_open_excel_workbooks() -> Result<Vec<ExcelWorkbookItem>, String> {
+    let ps_script = r#"
+$ErrorActionPreference = 'Stop'
+try {
+    $excel = [System.Runtime.InteropServices.Marshal]::GetActiveObject("Excel.Application")
+    if ($null -eq $excel) {
+        Write-Output "STATUS:NOT_RUNNING"
+        exit 0
+    }
+    if ($excel.Workbooks.Count -eq 0) {
+        Write-Output "STATUS:NO_WORKBOOKS"
+        exit 0
+    }
+    $activeFull = if ($excel.ActiveWorkbook) { $excel.ActiveWorkbook.FullName } else { "" }
+    Write-Output "STATUS:OK"
+    foreach ($w in $excel.Workbooks) {
+        $saved = $w.Saved
+        $isActive = ($w.FullName -eq $activeFull)
+        Write-Output "WB:$($w.FullName)|$($w.Name)|$isActive|$saved"
+    }
+} catch {
+    Write-Output "STATUS:NOT_RUNNING"
+}
+"#;
+
+    let output = Command::new("powershell")
+        .args(["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", ps_script])
+        .output()
+        .map_err(|e| format!("Failed to query Microsoft Excel: {e}"))?;
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let mut status = "NOT_RUNNING".to_string();
+    let mut workbooks = Vec::new();
+
+    for line in stdout.lines() {
+        let trimmed = line.trim();
+        if let Some(val) = trimmed.strip_prefix("STATUS:") {
+            status = val.to_string();
+        } else if let Some(val) = trimmed.strip_prefix("WB:") {
+            let parts: Vec<&str> = val.split('|').collect();
+            if parts.len() >= 4 {
+                let full_path = parts[0].to_string();
+                let name = parts[1].to_string();
+                let is_active = parts[2].eq_ignore_ascii_case("True");
+                let is_saved = parts[3].eq_ignore_ascii_case("True");
+                workbooks.push(ExcelWorkbookItem {
+                    full_path,
+                    name,
+                    is_active,
+                    is_saved,
+                });
+            }
+        }
+    }
+
+    match status.as_str() {
+        "NOT_RUNNING" => Err("Microsoft Excel is not running or no COM instance was found.".to_string()),
+        "NO_WORKBOOKS" => Err("Microsoft Excel is open, but no workbooks are currently open.".to_string()),
+        "OK" => Ok(workbooks),
+        other => Err(format!("Failed to retrieve Excel workbooks: {other}")),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
